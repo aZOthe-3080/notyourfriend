@@ -7,6 +7,7 @@ import net.azothe.notyourfriend.NotYourFriend;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import org.jspecify.annotations.NonNull;
 
 public record CreateGuiParticles(int id, int count) implements CustomPacketPayload {
     public static final CustomPacketPayload.Type<CreateGuiParticles> TYPE = new CustomPacketPayload.Type<>(NotYourFriend.id("create_gui_particle"));
@@ -26,7 +27,7 @@ public record CreateGuiParticles(int id, int count) implements CustomPacketPaylo
             );
 
     @Override
-    public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
+    public CustomPacketPayload.@NonNull Type<? extends CustomPacketPayload> type() {
         return TYPE;
     }
 }
