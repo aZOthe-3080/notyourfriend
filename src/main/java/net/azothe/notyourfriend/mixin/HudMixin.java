@@ -66,7 +66,7 @@ public class HudMixin {
         }
 
         if (u >= 0) {
-            graphics.blit(RenderPipelines.GUI_TEXTURED, BAR_SPRITESHEET, xo, yo, u, v, 9, 9, 72, 54);
+            graphics.blit(RenderPipelines.GUI_TEXTURED, BAR_SPRITESHEET, xo, yo, u, v, 9, 9, 72, 27);
         }
 
         if (((xo - (graphics.guiWidth() / 2 - 91)) / 8) == 0) {
