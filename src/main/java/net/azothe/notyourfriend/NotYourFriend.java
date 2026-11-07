@@ -1,5 +1,6 @@
 package net.azothe.notyourfriend;
 
+import net.azothe.notyourfriend.creativemodetab.ModCreativeModTabs;
 import net.azothe.notyourfriend.data.PlayerData;
 import net.azothe.notyourfriend.item.ModItems;
 import net.minecraft.resources.Identifier;
@@ -25,6 +26,7 @@ public class NotYourFriend {
     public NotYourFriend(IEventBus eventBus, ModContainer modContainer) {
         eventBus.addListener(this::commonSetup);
 
+        ModCreativeModTabs.register(eventBus);
         ModItems.register(eventBus);
         PlayerData.register(eventBus);
     }

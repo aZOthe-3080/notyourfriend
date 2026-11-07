@@ -2,11 +2,9 @@ package net.azothe.notyourfriend.guiparticle.guiparticleclass;
 
 import net.azothe.notyourfriend.NotYourFriend;
 import net.azothe.notyourfriend.guiparticle.GuiParticle;
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
-import net.minecraft.util.Mth;
 
 import static net.azothe.notyourfriend.NotYourFriend.RANDOM;
 
@@ -16,7 +14,7 @@ public class BloodGuiParticle extends GuiParticle {
     private double dx;
     private double dy;
     private final int type;
-    private static final Identifier SPRITESHEET = NotYourFriend.id("textures/gui_particle/blood.png");
+    private static final Identifier SPRITESHEET = NotYourFriend.id("gui_particle/blood");
 
     public BloodGuiParticle(GuiGraphicsExtractor graphics, float green_chance, int pos, int force) {
         super();
@@ -28,14 +26,20 @@ public class BloodGuiParticle extends GuiParticle {
     }
 
     @Override
-    public void tick(GuiGraphicsExtractor graphics, DeltaTracker partialTick) {
-        this.x += this.dx * partialTick.getRealtimeDeltaTicks();
-        this.y += this.dy * partialTick.getRealtimeDeltaTicks();
-        this.dx -= Mth.sign(this.dx) * 0.1 * partialTick.getRealtimeDeltaTicks();
-        this.dy += 0.5 * partialTick.getRealtimeDeltaTicks();
+    public void tick() {
+        this.x += this.dx;
+        this.y += this.dy;
+        this.dx *= 0.98;
+        this.dy += 0.5;
+    }
+
+    @Override
+    public void extractRenderState(GuiGraphicsExtractor graphics) {
         if (y > graphics.guiHeight() * 1.1 || x > graphics.guiWidth() * 1.1 || x < -graphics.guiWidth() * 0.1) {
             this.remove();
         }
-        graphics.blit(RenderPipelines.GUI_TEXTURED, SPRITESHEET, (int)this.x, (int)this.y, 5 * this.type, 0, 5, 5, 50, 5);
+        graphics.enableScissor((int)this.x, (int)this.y, (int)this.x + 5, (int)this.y + 5);
+        graphics.blitSprite(RenderPipelines.GUI_TEXTURED, SPRITESHEET, (int)this.x - this.type * 5, (int)this.y, 50, 5);
+        graphics.disableScissor();
     }
 }

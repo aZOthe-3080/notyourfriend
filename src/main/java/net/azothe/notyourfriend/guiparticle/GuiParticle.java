@@ -1,6 +1,5 @@
 package net.azothe.notyourfriend.guiparticle;
 
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import java.util.ArrayList;
@@ -13,21 +12,28 @@ public abstract class GuiParticle {
         particles.add(this);
     }
 
-    public abstract void tick(GuiGraphicsExtractor graphics, DeltaTracker partialTick);
+    public abstract void tick();
+
+    public abstract void extractRenderState(GuiGraphicsExtractor graphics);
 
     public void remove() {
         this.remove = true;
     }
 
-
-    public static void tickParticles(GuiGraphicsExtractor graphics, DeltaTracker partialTick) {
-        ArrayList<GuiParticle> iterParticles = (ArrayList<GuiParticle>)particles.clone();
+    public static void tickParticles() {
+        ArrayList<GuiParticle> iterParticles = new ArrayList<>(particles);
         iterParticles.forEach(particle -> {
             if (particle.remove) {
                 particles.remove(particle);
             } else {
-                particle.tick(graphics, partialTick);
+                particle.tick();
             }
+        });
+    }
+
+    public static void extractParticles(GuiGraphicsExtractor graphics) {
+        particles.forEach(particle -> {
+            particle.extractRenderState(graphics);
         });
     }
 }

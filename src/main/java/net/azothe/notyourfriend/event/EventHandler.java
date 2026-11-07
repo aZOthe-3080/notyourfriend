@@ -1,33 +1,43 @@
 package net.azothe.notyourfriend.event;
 
-import com.mojang.brigadier.arguments.FloatArgumentType;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.azothe.notyourfriend.NotYourFriend;
-import net.azothe.notyourfriend.data.ClientPayloadHandler;
+import net.azothe.notyourfriend.command.NotyourfriendCommand;
+import net.azothe.notyourfriend.data.PayloadHandler;
 import net.azothe.notyourfriend.data.PlayerData;
-import net.azothe.notyourfriend.data.payloads.CreateGuiParticles;
+import net.azothe.notyourfriend.data.payloads.CreateGuiParticlesPayload;
+import net.azothe.notyourfriend.data.datagen.ModModelProvider;
+import net.azothe.notyourfriend.data.payloads.MouseStabPayload;
+import net.azothe.notyourfriend.data.payloads.PlayerHurtPayload;
+import net.azothe.notyourfriend.data.payloads.PlayerSoundPayload;
+import net.azothe.notyourfriend.data.payloads.StabRemovedPayload;
 import net.azothe.notyourfriend.guiparticle.GuiParticle;
 import net.azothe.notyourfriend.guiparticle.guiparticleclass.BloodGuiParticle;
 import net.azothe.notyourfriend.item.ModItems;
-import net.azothe.notyourfriend.item.itemclass.ShardItem;
-import net.azothe.notyourfriend.item.itemclass.ThornItem;
+import net.azothe.notyourfriend.item.items.ShardItem;
+import net.azothe.notyourfriend.item.items.ThornItem;
+import net.azothe.notyourfriend.keymapping.ModKeyMappingCategories;
+import net.azothe.notyourfriend.keymapping.ModKeyMappings;
+import net.azothe.notyourfriend.screen.AbilityScreen;
 import net.minecraft.client.Minecraft;
-import net.minecraft.commands.Commands;
-import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
+import net.neoforged.neoforge.data.event.GatherDataEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -40,80 +50,109 @@ import static net.azothe.notyourfriend.NotYourFriend.RANDOM;
 
 @EventBusSubscriber(modid = NotYourFriend.MOD_ID)
 public class EventHandler {
+    private static final Identifier HEART_AMOUNT_MODIFIER = NotYourFriend.id("heart_amount_modifier");
+    private static final Identifier SOUL_ENERGY_BAR_BG = NotYourFriend.id("hud/soul_energy_bar_background");
+    private static final Identifier SOUL_ENERGY_BAR = NotYourFriend.id("hud/soul_energy_bar");
+    private static final Identifier SOUL_ICON = Identifier.withDefaultNamespace("textures/particle/soul_9.png");
+
     @SubscribeEvent
-    public static void onServerTick(ServerTickEvent.Post event) {
-        event.getServer().getPlayerList().getPlayers().forEach(player -> {
-            if (player.getData(PlayerData.INFECTION_RATE) > 0f && (int)(RANDOM.nextFloat(2500f) / player.getData(PlayerData.INFECTION_RATE)) == 0) {
-                player.setData(PlayerData.INFECTION_PROGRESS, player.getData(PlayerData.INFECTION_PROGRESS) + RANDOM.nextFloat(0.1f, 0.35f));
+    public static void onServerTickPost(ServerTickEvent.Post event) {
+        for (ServerPlayer player : event.getServer().getPlayerList().getPlayers()) {
+            if (player.getData(PlayerData.INFECTION_RATE) > 0f &&
+                    (int)(RANDOM.nextFloat(2500f) / player.getData(PlayerData.INFECTION_RATE)) == 0 &&
+                    player.getAbsorptionAmount() <= 0) {
+                player.setData(PlayerData.INFECTION_PROGRESS, player.getData(PlayerData.INFECTION_PROGRESS) + RANDOM.nextFloat(0.1f, 0.35f)); // increase infection
             }
-            if (player.getData(PlayerData.STAB_TYPE) == 0 && player.getData(PlayerData.INFECTION_RATE) <= 0 && RANDOM.nextInt(2500) == 0) {
-                player.setData(PlayerData.INFECTION_PROGRESS, player.getData(PlayerData.INFECTION_PROGRESS) - RANDOM.nextFloat(0.2f, 0.5f));
+            if (player.getData(PlayerData.STAB_TYPE) == 0 &&
+                    player.getData(PlayerData.INFECTION_RATE) <= 0 &&
+                    (int)(RANDOM.nextFloat(2500f) / -(player.getData(PlayerData.INFECTION_RATE) - 1f)) == 0) {
+                player.setData(PlayerData.INFECTION_PROGRESS, player.getData(PlayerData.INFECTION_PROGRESS) - RANDOM.nextFloat(0.2f, 0.5f)); // reduce infection when not stabbed
             }
-            if (player.getData(PlayerData.INFECTION_PROGRESS) > Math.min((player.getMaxHealth() - player.getAbsorptionAmount()) / 2f, 20f)) {
-                player.setData(PlayerData.INFECTION_PROGRESS, Math.min((player.getMaxHealth() - player.getAbsorptionAmount()) / 2f, 20f));
-            } else if (player.getData(PlayerData.INFECTION_PROGRESS) < 0f) {
+            if (player.getData(PlayerData.INFECTION_PROGRESS) > 0f && player.getAbsorptionAmount() > 0f) { // use absorption to reduce infection
+                float oldInfection = player.getData(PlayerData.INFECTION_PROGRESS);
+                player.setData(PlayerData.INFECTION_PROGRESS, Math.max(oldInfection - player.getAbsorptionAmount(), 0));
+                player.setAbsorptionAmount(player.getAbsorptionAmount() - (oldInfection - player.getData(PlayerData.INFECTION_PROGRESS)));
+                player.level().playSound(null, player, SoundEvents.ZOMBIE_VILLAGER_CURE, SoundSource.PLAYERS, 0.25f, 1.5f);
+            }
+            if (player.getData(PlayerData.INFECTION_PROGRESS) > (player.getMaxHealth()) / 2f) { // infection upper cap
+                player.setData(PlayerData.INFECTION_PROGRESS, (player.getMaxHealth()) / 2f);
+            } else if (player.getData(PlayerData.INFECTION_PROGRESS) < 0f) { // infection lower cap
                 player.setData(PlayerData.INFECTION_PROGRESS, 0f);
             }
-            if (player.getData(PlayerData.PAIN) > 0) {
-                player.setData(PlayerData.PAIN, (int)Math.floor(player.getData(PlayerData.PAIN) * 0.95));
+            if (player.getData(PlayerData.SOUL_ENERGY) > player.getData(PlayerData.MAX_SOUL_ENERGY)) { // soul power upper cap
+                player.setData(PlayerData.SOUL_ENERGY, player.getData(PlayerData.MAX_SOUL_ENERGY));
+            } else if (player.getData(PlayerData.SOUL_ENERGY) < 0) { // soul power lower cap
+                player.setData(PlayerData.SOUL_ENERGY, 0);
             }
-            if (player.gameMode.isSurvival()) {
-                player.getAttributes().getInstance(Attributes.MAX_HEALTH).addOrReplacePermanentModifier(new AttributeModifier(NotYourFriend.id("health_breaking"), -2f * (float)player.getData(PlayerData.MAX_HEALTH_REDUCTION), AttributeModifier.Operation.ADD_VALUE));
+            if (player.getData(PlayerData.PAIN) > 0) { // passively decrease pain
+                player.setData(PlayerData.PAIN, (int)Math.floor(player.getData(PlayerData.PAIN) * 0.95f));
             }
-            if (player.getData(PlayerData.STAB_TYPE) == 2 && RANDOM.nextInt(6000) == 0) {
-                PacketDistributor.sendToPlayer(player, new CreateGuiParticles(3, RANDOM.nextInt(1, 4)));
+            if (player.gameMode.isSurvival()) { // applying max health reduction attribute modifier
+                player.getAttributes().getInstance(Attributes.MAX_HEALTH).addOrReplacePermanentModifier(new AttributeModifier(HEART_AMOUNT_MODIFIER, 2f * (float)player.getData(PlayerData.MAX_HEALTH_MODIFICATION), AttributeModifier.Operation.ADD_VALUE));
+            }
+            if (player.getData(PlayerData.STAB_TYPE) == 2 && RANDOM.nextInt(6000) == 0) { // 1x thorn bleeding
+                PacketDistributor.sendToPlayer(player, new CreateGuiParticlesPayload(3, RANDOM.nextInt(1, 4)));
                 player.setData(PlayerData.PAIN, player.getData(PlayerData.PAIN) + 40);
-                if (player.getHealth() > player.getMaxHealth() * 0.77 && player.getHealth() - 1f > 2f * Math.floor(player.getData(PlayerData.INFECTION_PROGRESS))) {
+                if (player.getHealth() > player.getMaxHealth() * 0.75 && player.getHealth() - 1f > 2f * Math.floor(player.getData(PlayerData.INFECTION_PROGRESS))) {
                     player.hurtServer(player.level(), player.damageSources().magic(), 1f);
                 }
-            } else if (player.getData(PlayerData.STAB_TYPE) == 3 && RANDOM.nextInt(3600) == 0) {
-                PacketDistributor.sendToPlayer(player, new CreateGuiParticles(3, RANDOM.nextInt(1, 4)));
+            } else if (player.getData(PlayerData.STAB_TYPE) == 3 && RANDOM.nextInt(3600) == 0) { // 2x thorn bleeding
+                PacketDistributor.sendToPlayer(player, new CreateGuiParticlesPayload(3, RANDOM.nextInt(1, 4)));
                 player.setData(PlayerData.PAIN, player.getData(PlayerData.PAIN) + 40);
-                if (player.getHealth() > player.getMaxHealth() * 0.55 && player.getHealth() - 1f > 2f * Math.floor(player.getData(PlayerData.INFECTION_PROGRESS))) {
+                if (player.getHealth() > player.getMaxHealth() * 0.5 && player.getHealth() - 1f > 2f * Math.floor(player.getData(PlayerData.INFECTION_PROGRESS))) {
                     player.hurtServer(player.level(), player.damageSources().magic(), 1f);
                 }
-            } else if (player.getData(PlayerData.STAB_TYPE) == 4 && RANDOM.nextInt(2400) == 0) {
-                PacketDistributor.sendToPlayer(player, new CreateGuiParticles(3, RANDOM.nextInt(1, 4)));
+            } else if (player.getData(PlayerData.STAB_TYPE) == 4 && RANDOM.nextInt(2400) == 0) { // 3x thorn bleeding
+                PacketDistributor.sendToPlayer(player, new CreateGuiParticlesPayload(3, RANDOM.nextInt(1, 4)));
                 player.setData(PlayerData.PAIN, player.getData(PlayerData.PAIN) + 40);
                 if (player.getHealth() > player.getMaxHealth() * 0.33 && player.getHealth() - 1f > 2f * Math.floor(player.getData(PlayerData.INFECTION_PROGRESS))) {
                     player.hurtServer(player.level(), player.damageSources().magic(), 1f);
                 }
             }
-        });
+        }
     }
 
     @SubscribeEvent
     public static void onLivingIncomingDamage(LivingIncomingDamageEvent event) {
         if (event.getEntity() instanceof Player player && !player.level().isClientSide()) {
-            if (player.getData(PlayerData.INFECTION_PROGRESS) >= 1f && player.getHealth() - event.getAmount() < 2f * player.getData(PlayerData.INFECTION_PROGRESS) && event.getAmount() < 9999) {
-                if (player.invulnerableTime <= 10) {
-                    player.setData(PlayerData.INFECTION_PROGRESS, player.getData(PlayerData.INFECTION_PROGRESS) - 1f);
-                    PacketDistributor.sendToPlayer((ServerPlayer)player, new CreateGuiParticles(2, 15));
-                    player.level().playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.SLIME_HURT, SoundSource.PLAYERS);
-                    player.setData(PlayerData.MAX_HEALTH_REDUCTION, player.getData(PlayerData.MAX_HEALTH_REDUCTION) + 1);
+            if (event.getSource().getDirectEntity() instanceof Player source) { // hitting another player stabs them
+                if (event.getSource().getDirectEntity().getWeaponItem().getItem() instanceof ShardItem) {
+                    ShardItem.stab(player.level(), player, source, false);
+                } else if (event.getSource().getDirectEntity().getWeaponItem().getItem() instanceof ThornItem) {
+                    ThornItem.stab(player.level(), player, source, false);
+                }
+            }
+            if (player.getData(PlayerData.INFECTION_PROGRESS) >= 1f && // if the player has an infected heart
+                    player.getHealth() - event.getAmount() < 2f * player.getData(PlayerData.INFECTION_PROGRESS) && // if the damage will reach the brittle heart
+                    event.getSource() != player.damageSources().genericKill()) { // ignore /kill
+                if (player.getInvulnerableTime() <= 10) { // if the player can be damaged
+                    player.setData(PlayerData.INFECTION_PROGRESS, player.getData(PlayerData.INFECTION_PROGRESS) - 1); // reduce infection by 1
+                    PacketDistributor.sendToPlayer((ServerPlayer)player, new CreateGuiParticlesPayload(2, 15)); // create particles
+                    player.level().playSound(null, player, SoundEvents.SLIME_HURT, SoundSource.PLAYERS, 1, 1); // heart pop sound
+                    player.setData(PlayerData.MAX_HEALTH_MODIFICATION, player.getData(PlayerData.MAX_HEALTH_MODIFICATION) - 1); // remove 1 heart
                 }
                 player.setHealth(Math.min(player.getHealth(), Mth.floor(player.getData(PlayerData.INFECTION_PROGRESS)) * 2f) + 1f);
                 event.setAmount(1f);
             }
-            if (player.getHealth() - event.getAmount() <= 0f && player.getData(PlayerData.STAB_TYPE) != 0) {
+            if (player.getHealth() - event.getAmount() <= 0f) { // drop stab item on death
+                ItemEntity item = null;
                 switch (player.getData(PlayerData.STAB_TYPE)) {
-                    case 1 -> player.drop(ModItems.SHARD.toStack(), true, false);
-                    case 2 -> player.drop(ModItems.THORN.toStack(), true, false);
-                    case 3 -> player.drop(new ItemStack(ModItems.THORN.get(), 2), true, false);
-                    case 4 -> player.drop(new ItemStack(ModItems.THORN.get(), 3), true, false);
+                    case 1 -> item = player.createItemStackToDrop(ModItems.SHARD.toStack(), true, false);
+                    case 2 -> item = player.createItemStackToDrop(ModItems.THORN.toStack(), true, false);
+                    case 3 -> item = player.createItemStackToDrop(ModItems.THORN.toStack(2), true, false);
+                    case 4 -> item = player.createItemStackToDrop(ModItems.THORN.toStack(3), true, false);
                 }
-                player.setData(PlayerData.STAB_TYPE, 0);
-                player.setData(PlayerData.INFECTION_RATE, 0f);
-                player.setData(PlayerData.INFECTION_PROGRESS, 0f);
-                player.setHealth(1f);
-                event.setAmount(1f);
+                if (item != null) {
+                    player.level().addFreshEntity(item);
+                }
             }
         }
     }
 
     @SubscribeEvent
-    public static void onRenderGui(RenderGuiEvent.Post event) {
+    public static void onRenderGuiPost(RenderGuiEvent.Post event) {
         Player player = Minecraft.getInstance().player;
+        GuiGraphicsExtractor graphics = event.getGuiGraphics();
         if (player.getData(PlayerData.PARTICLE_CREATION).id() != 0) {
             for (int i = 0; i < player.getData(PlayerData.PARTICLE_CREATION).count(); i++) {
                 switch (player.getData(PlayerData.PARTICLE_CREATION).id()) {
@@ -123,117 +162,88 @@ public class EventHandler {
                     default -> {}
                 }
             }
-            player.setData(PlayerData.PARTICLE_CREATION, new CreateGuiParticles(0, 0));
+            player.setData(PlayerData.PARTICLE_CREATION, new CreateGuiParticlesPayload(0, 0));
         }
-        GuiParticle.tickParticles(event.getGuiGraphics(), event.getPartialTick());
+        GuiParticle.extractParticles(graphics);
+        if (player.getData(PlayerData.EVIL)) {
+            int actualSoulEnergy = Math.min(player.getData(PlayerData.SOUL_ENERGY), player.getData(PlayerData.MAX_SOUL_ENERGY));
+            int bgHeight = (int)Math.sqrt(player.getData(PlayerData.MAX_SOUL_ENERGY)) + 4;
+            int bgY = graphics.guiHeight() - 17 - (int)Math.sqrt(player.getData(PlayerData.MAX_SOUL_ENERGY));
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, SOUL_ENERGY_BAR_BG, 3, bgY - 10,
+                    16, bgHeight);
+            int barHeight = (int)((Math.sqrt(player.getData(PlayerData.MAX_SOUL_ENERGY)) + 1) * actualSoulEnergy / player.getData(PlayerData.MAX_SOUL_ENERGY));
+            int barY = graphics.guiHeight() - 15 - barHeight;
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, SOUL_ENERGY_BAR, 5, barY - 10,
+                    12, barHeight);
+            graphics.blit(RenderPipelines.GUI_TEXTURED, SOUL_ICON, 2, graphics.guiHeight() - 20, 5, 0, 5, 6, 16, 16);
+            graphics.text(Minecraft.getInstance().font, actualSoulEnergy + "/" + player.getData(PlayerData.MAX_SOUL_ENERGY), 8, graphics.guiHeight() - 21, 0xFFFFFFFF);
+        }
     }
 
     @SubscribeEvent
     public static void onRegisterPayloadHandlers(RegisterPayloadHandlersEvent event) {
-        final PayloadRegistrar registrar = event.registrar("1");
+        final PayloadRegistrar registrar = event.registrar(NotYourFriend.MOD_ID);
         registrar.playToClient(
-                CreateGuiParticles.TYPE,
-                CreateGuiParticles.STREAM_CODEC,
-                ClientPayloadHandler::onParticleCreation
+                CreateGuiParticlesPayload.TYPE,
+                CreateGuiParticlesPayload.STREAM_CODEC,
+                PayloadHandler.Client::onCreateGuiParticles
+        );
+        registrar.playToServer(
+                MouseStabPayload.TYPE,
+                MouseStabPayload.STREAM_CODEC,
+                PayloadHandler.Server::onMouseStab
+        );
+        registrar.playToServer(
+                StabRemovedPayload.TYPE,
+                StabRemovedPayload.STREAM_CODEC,
+                PayloadHandler.Server::onStabRemoved
+        );
+        registrar.playToServer(
+                PlayerSoundPayload.TYPE,
+                PlayerSoundPayload.STREAM_CODEC,
+                PayloadHandler.Server::onPlayerSound
+        );
+        registrar.playToServer(
+                PlayerHurtPayload.TYPE,
+                PlayerHurtPayload.STREAM_CODEC,
+                PayloadHandler.Server::onPlayerHurt
         );
     }
 
     @SubscribeEvent
     public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
         Player player = event.getEntity();
-        if (2f * (float)player.getData(PlayerData.MAX_HEALTH_REDUCTION) >= player.getMaxHealth() && !player.level().isClientSide()) {
-            ((ServerPlayer)player).setGameMode(GameType.SPECTATOR);
-            player.setData(PlayerData.MAX_HEALTH_REDUCTION, 0);
+        if (player.getAttributes().getValue(Attributes.MAX_HEALTH) <= 1f && !player.level().isClientSide()) {
+            ((ServerPlayer)player).setGameMode(GameType.SPECTATOR); // spectator the player on losing all max health
+            player.setData(PlayerData.MAX_HEALTH_MODIFICATION, 0); // reset health modification
         }
     }
 
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
-        event.getDispatcher().register(
-                Commands.literal("notyourfriend").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
-                        .then(Commands.literal("data")
-                                .then(Commands.literal("set")
-                                        .then(Commands.argument("targets", EntityArgument.players())
-                                                .then(Commands.literal("infection_rate")
-                                                        .then(Commands.argument("value", FloatArgumentType.floatArg(0f))
-                                                                .executes(context -> {
-                                                                    EntityArgument.getPlayers(context, "targets").forEach(player -> player.setData(PlayerData.INFECTION_RATE, FloatArgumentType.getFloat(context, "value")));
-                                                                    return 0;
-                                                                })))
-                                                .then(Commands.literal("infection_progress")
-                                                        .then(Commands.argument("value", FloatArgumentType.floatArg(0f))
-                                                                .executes(context -> {
-                                                                    EntityArgument.getPlayers(context, "targets").forEach(player -> player.setData(PlayerData.INFECTION_PROGRESS, FloatArgumentType.getFloat(context, "value")));
-                                                                    return 0;
-                                                                })))
-                                                .then(Commands.literal("stab_type")
-                                                        .then(Commands.argument("value", IntegerArgumentType.integer(0, 4))
-                                                                .executes(context -> {
-                                                                    EntityArgument.getPlayers(context, "targets").forEach(player -> player.setData(PlayerData.STAB_TYPE, IntegerArgumentType.getInteger(context, "value")));
-                                                                    return 0;
-                                                                })))
-                                                .then(Commands.literal("pain")
-                                                        .then(Commands.argument("value", IntegerArgumentType.integer(1))
-                                                                .executes(context -> {
-                                                                    EntityArgument.getPlayers(context, "targets").forEach(player -> player.setData(PlayerData.PAIN, IntegerArgumentType.getInteger(context, "value")));
-                                                                    return 0;
-                                                                })))
-                                                .then(Commands.literal("max_health_reduction")
-                                                        .then(Commands.argument("value", IntegerArgumentType.integer(0))
-                                                                .executes(context -> {
-                                                                    EntityArgument.getPlayers(context, "targets").forEach(player -> player.setData(PlayerData.MAX_HEALTH_REDUCTION, IntegerArgumentType.getInteger(context, "value")));
-                                                                    return 0;
-                                                                })))))
-                                .then(Commands.literal("query")
-                                        .then(Commands.argument("player", EntityArgument.player())
-                                                .then(Commands.literal("infection_rate")
-                                                        .executes(context -> {
-                                                            context.getSource().sendSystemMessage(Component.literal(String.valueOf(EntityArgument.getPlayer(context, "player").getData(PlayerData.INFECTION_RATE))));
-                                                            return 0;
-                                                        }))
-                                                .then(Commands.literal("infection_progress")
-                                                        .executes(context -> {
-                                                            context.getSource().sendSystemMessage(Component.literal(String.valueOf(EntityArgument.getPlayer(context, "player").getData(PlayerData.INFECTION_PROGRESS))));
-                                                            return 0;
-                                                        }))
-                                                .then(Commands.literal("stab_type")
-                                                        .executes(context -> {
-                                                            context.getSource().sendSystemMessage(Component.literal(String.valueOf(EntityArgument.getPlayer(context, "player").getData(PlayerData.STAB_TYPE))));
-                                                            return 0;
-                                                        }))
-                                                .then(Commands.literal("pain")
-                                                        .executes(context -> {
-                                                            context.getSource().sendSystemMessage(Component.literal(String.valueOf(EntityArgument.getPlayer(context, "player").getData(PlayerData.PAIN))));
-                                                            return 0;
-                                                        }))
-                                                .then(Commands.literal("max_health_reduction")
-                                                        .executes(context -> {
-                                                            context.getSource().sendSystemMessage(Component.literal(String.valueOf(EntityArgument.getPlayer(context, "player").getData(PlayerData.MAX_HEALTH_REDUCTION))));
-                                                            return 0;
-                                                        })))))
-                        .then(Commands.literal("create_gui_particles")
-                                .then(Commands.argument("targets", EntityArgument.players())
-                                        .then(Commands.argument("id", IntegerArgumentType.integer(1, 3))
-                                                .then(Commands.argument("count", IntegerArgumentType.integer(1))
-                                                        .executes((context -> {
-                                                            EntityArgument.getPlayers(context, "targets").forEach(player -> PacketDistributor.sendToPlayer(player, new CreateGuiParticles(IntegerArgumentType.getInteger(context, "id"), IntegerArgumentType.getInteger(context, "count"))));
-                                                            return 0;
-                                                        }))))))
-                        .then(Commands.literal("simulate_stab")
-                                .then(Commands.argument("players", EntityArgument.players())
-                                        .then(Commands.literal("shard")
-                                                .executes(context -> {
-                                                    EntityArgument.getPlayers(context, "players").forEach(player -> {
-                                                        ShardItem.onItemUse(player.level(), player, InteractionHand.MAIN_HAND);
-                                                    });
-                                                    return 0;
-                                                }))
-                                        .then(Commands.literal("thorn")
-                                                .executes(context -> {
-                                                    EntityArgument.getPlayers(context, "players").forEach(player -> {
-                                                        ThornItem.onItemUse(player.level(), player, InteractionHand.MAIN_HAND);
-                                                    });
-                                                    return 0;
-                                                })))));
+        NotyourfriendCommand.register(event.getDispatcher());
+    }
+
+    @SubscribeEvent
+    public static void onGatherDataClient(GatherDataEvent.Client event) {
+        event.createProvider(ModModelProvider::new);
+    }
+
+    @SubscribeEvent
+    public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
+        event.registerCategory(ModKeyMappingCategories.NOTYOURFRIEND_CATEGORY);
+
+        event.register(ModKeyMappings.ABILITY_MENU.get());
+    }
+
+    @SubscribeEvent
+    public static void onClientTick(ClientTickEvent.Post event) {
+        Player player = Minecraft.getInstance().player;
+        while (ModKeyMappings.ABILITY_MENU.get().consumeClick()) {
+            if (player.getData(PlayerData.EVIL)) {
+                Minecraft.getInstance().setScreenAndShow(new AbilityScreen(Component.translatable("notyourfriend.ability_menu.title")));
+            }
+        }
+        GuiParticle.tickParticles();
     }
 }

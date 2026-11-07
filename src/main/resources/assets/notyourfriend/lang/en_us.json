@@ -1,4 +1,22 @@
 {
   "item.notyourfriend.shard": "Shard",
-  "item.notyourfriend.thorn": "Thorn"
+  "item.notyourfriend.thorn": "Thorn",
+  "item.notyourfriend.tweezers": "Tweezers",
+  "item.notyourfriend.knife": "Knife",
+
+  "commands.notyourfriend.start.not_enough_players": "Not enough players to start the game, 3 or more required",
+  "commands.notyourfriend.start.game_already_started": "Game already started!",
+
+  "notyourfriend.role_reveal": "You are %s",
+  "notyourfriend.role_evil": "the evil player!",
+  "notyourfriend.role_chill": "a player",
+  "notyourfriend.role_evil_description": "Kill everyone, be evil etc. Press %s to open your ability menu.",
+  "notyourfriend.role_chill_description": "Be chill and kill the evil player.",
+
+  "key.category.notyourfriend.notyourfriend": "Not Your Friend",
+
+  "key.notyourfriend.ability_menu": "Ability Menu",
+
+  "notyourfriend.ability_menu.title": "Ability menu",
+  "creativetab.notyourfriend": "Not Your Friend"
 }

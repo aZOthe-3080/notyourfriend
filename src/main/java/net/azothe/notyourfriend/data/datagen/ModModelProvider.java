@@ -1,4 +1,4 @@
-package net.azothe.notyourfriend.datagen;
+package net.azothe.notyourfriend.data.datagen;
 
 import net.azothe.notyourfriend.NotYourFriend;
 import net.azothe.notyourfriend.item.ModItems;
@@ -16,7 +16,9 @@ public class ModModelProvider extends ModelProvider {
 
     @Override
     protected void registerModels(BlockModelGenerators blockModels, ItemModelGenerators itemModels) {
-        itemModels.generateFlatItem(ModItems.SHARD.get(), ModelTemplates.FLAT_HANDHELD_ITEM);
-        itemModels.generateFlatItem(ModItems.THORN.get(), ModelTemplates.FLAT_HANDHELD_ITEM);
+        itemModels.generateFlatItem(ModItems.SHARD.get(), ModelTemplates.FLAT_ITEM);
+        itemModels.generateFlatItem(ModItems.THORN.get(), ModelTemplates.FLAT_ITEM);
+        itemModels.generateFlatItem(ModItems.TWEEZERS.get(), ModelTemplates.FLAT_ITEM);
+        itemModels.generateFlatItem(ModItems.KNIFE.get(), ModelTemplates.FLAT_HANDHELD_ITEM);
     }
 }
